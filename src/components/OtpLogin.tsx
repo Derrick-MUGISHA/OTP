@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../../firebase";
-import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Loader2 } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "./ui/input-otp";
 import { FirebaseError } from "firebase/app";
+import PhoneInput from "react-phone-number-input";
+import "react-phone-number-input/style.css";
 
 function OtpLogin() {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -22,7 +23,6 @@ function OtpLogin() {
   const [isClient, setIsClient] = useState(false);
   const router = useRouter();
 
-  // Only run client-side code after component is mounted
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -37,7 +37,7 @@ function OtpLogin() {
 
   useEffect(() => {
     if (!isClient) return;
-    
+
     try {
       const recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
@@ -60,7 +60,7 @@ function OtpLogin() {
 
   const verifyOtp = async () => {
     if (!isClient) return;
-    
+
     startTransition(async () => {
       setError(null);
 
@@ -82,7 +82,7 @@ function OtpLogin() {
   const requestOtp = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (!isClient) return;
-    
+
     setResendCountdown(60);
 
     startTransition(async () => {
@@ -117,64 +117,94 @@ function OtpLogin() {
 
   const loadingIndicator = (
     <div className="flex justify-center items-center">
-      <Loader2 className="animate-spin" />
+      <Loader2 className="animate-spin text-white" />
     </div>
   );
 
-  // Don't attempt to render client-specific content during SSR
   if (!isClient) {
-    return <div className="flex justify-center items-center p-8">Loading...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center">
-      {!confirmationResult && (
-        <form onSubmit={requestOtp} className="w-full max-w-xs">
-          <Input
-            className="text-black mb-2"
-            type="tel"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            placeholder="+1234567890"
-          />
-          <p className="text-sm text-gray-500 mb-4">Please enter your phone number</p>
-        </form>
-      )}
+    <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">Phone Verification</h2>
 
-      {confirmationResult && (
-        <div className="my-4">
-          <p className="text-sm text-gray-500 mb-2">Enter the OTP sent to your phone</p>
-          <InputOTP maxLength={6} value={otp} onChange={(value) => setOtp(value)}>
-            <InputOTPGroup>
-              <InputOTPSlot index={0} />
-              <InputOTPSlot index={1} />
-              <InputOTPSlot index={2} />
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              <InputOTPSlot index={3} />
-              <InputOTPSlot index={4} />
-              <InputOTPSlot index={5} />
-            </InputOTPGroup>
-          </InputOTP>
+        {!confirmationResult && (
+          <form onSubmit={requestOtp} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number
+              </label>
+              <PhoneInput
+                international
+                countryCallingCodeEditable={false}
+                defaultCountry="US"
+                value={phoneNumber}
+                onChange={(value) => setPhoneNumber(value || "")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter your phone number with country code
+              </p>
+            </div>
+          </form>
+        )}
+
+        {confirmationResult && (
+          <div className="space-y-4">
+            <label className="block text-sm font-medium text-gray-700">
+              Enter OTP
+            </label>
+            <InputOTP
+              maxLength={6}
+              value={otp}
+              onChange={(value) => setOtp(value)}
+              className="justify-center"
+            >
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+            <p className="text-xs text-gray-500 text-center">
+              Enter the 6-digit code sent to your phone
+            </p>
+          </div>
+        )}
+
+        <Button
+          disabled={isPending || resendCountdown > 0 || !phoneNumber}
+          onClick={() => requestOtp()}
+          className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
+        >
+          {resendCountdown > 0
+            ? `Resend OTP in ${resendCountdown}`
+            : isPending
+            ? "Processing..."
+            : "Send OTP"}
+        </Button>
+
+        <div className="mt-4 text-center">
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {success && <p className="text-green-500 text-sm">{success}</p>}
         </div>
-      )}
-      
-      <Button
-        disabled={isPending || resendCountdown > 0 || !phoneNumber}
-        onClick={() => requestOtp()}
-        className="mt-5"
-      >
-        {resendCountdown > 0 ? `Resend OTP in ${resendCountdown}` : isPending ? "Sending OTP" : "Send OTP"}
-      </Button>
 
-      <div className="p-4 text-center">
-        {error && <p className="text-red-500">{error}</p>}
-        {success && <p className="text-green-500">{success}</p>}
+        <div id="recaptcha-container" />
+
+        {isPending && loadingIndicator}
       </div>
-      <div id="recaptcha-container" />
-
-      {isPending && loadingIndicator}
     </div>
   );
 }
